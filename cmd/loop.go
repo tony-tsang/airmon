@@ -15,13 +15,13 @@ const (
 
     HTU31DSoftReset = 0x1E
     HTU31DReadSerial = 0x0A
-    HTU31DConversion = 0x40
+    HTU31DConversion = 0x5E
     HTU31DReadTempHumid = 0x00
 
     HTU31DConversionPause = 25 // 25 milliseconds
 )
 
-func do_loop() {
+func DoLoop() {
 
     tempSensor, err := i2c.NewI2C(TempSensorAddr, I2cBus)
     if err != nil { log.Fatal(err) }
@@ -33,33 +33,46 @@ func do_loop() {
     defer pmSensor.Close()
 
     outBuffer := []byte {HTU31DSoftReset}
-    inBuffer := make([]byte, 16)
+    inBuffer := make([]byte, 6)
 
-    tempSensor.WriteBytes(outBuffer)
+    _, err = tempSensor.WriteBytes(outBuffer)
+    if err != nil { log.Printf("Error writing to temp sensor %d\n", err) }
+
+    outBuffer = []byte {HTU31DReadSerial}
+    _, err = tempSensor.WriteBytes(outBuffer)
+    if err != nil { log.Printf("Error writing to temp sensor %d\n", err) }
+
+    _, err = tempSensor.ReadBytes(inBuffer)
+    if err != nil { log.Printf("Error reading from temp sensor %d\n", err) }
+
+    serial := binary.BigEndian.Uint32(inBuffer)
+    log.Printf("serial %d\n", serial)
 
     for {
         outBuffer = []byte {HTU31DConversion}
-        n, err := tempSensor.WriteBytes(outBuffer)
+        _, err = tempSensor.WriteBytes(outBuffer)
         if err != nil { log.Printf("Error writing to temp sensor %d\n", err) }
-        log.Printf("Written %d bytes\n", n)
+        //log.Printf("Written %d bytes\n", n)
 
         time.Sleep(HTU31DConversionPause * time.Millisecond)
 
         outBuffer = []byte {HTU31DReadTempHumid}
-        n, err = tempSensor.WriteBytes(outBuffer)
+        _, err = tempSensor.WriteBytes(outBuffer)
         if err != nil { log.Printf("Error writing to temp sensor %d\n", err) }
-        log.Printf("Written %d bytes\n", n)
+        //log.Printf("Written %d bytes\n", n)
 
-        n, err = tempSensor.ReadBytes(inBuffer)
+        _, err = tempSensor.ReadBytes(inBuffer)
         if err != nil { log.Printf("Error reading from temp sensor %d\n", err) }
 
-        log.Printf("Read %d bytes\n", n)
+        //log.Printf("Read %d bytes\n", n)
 
-        temperatureByte := binary.BigEndian.Uint16(inBuffer[0:2])
+        temperatureRaw := binary.BigEndian.Uint16(inBuffer[0:2])
+        temperature := -40 + 165 * float32(temperatureRaw) / (2<<15 - 1)
+        log.Printf("temperature %.2fC\n", temperature)
 
-        temperature := -40 + 165 * float32(temperatureByte) / (2<<16 - 1)
-
-        log.Printf("temperature %.2f\n", temperature)
+        humidityRaw := binary.BigEndian.Uint16(inBuffer[3:5])
+        humidity := 100 * float32(humidityRaw) / (2<<15 - 1)
+        log.Printf("humidity %.2f%%\n", humidity)
 
         time.Sleep(10 * time.Second)
 
