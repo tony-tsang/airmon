@@ -9,16 +9,14 @@ import (
 
 
 const (
-    I2cBus                 = 1
-    PmSensorAddr   uint8 = 0x12
     TempSensorAddr uint8 = 0x40
 
-    HTU31DSoftReset = 0x1E
-    HTU31DReadSerial = 0x0A
-    HTU31DConversion = 0x5E
-    HTU31DReadTempHumid = 0x00
+    SoftReset     = 0x1E
+    ReadSerial    = 0x0A
+    Conversion    = 0x5E
+    ReadTempHumid = 0x00
 
-    HTU31DConversionPause = 25 // 25 milliseconds
+    ConversionPause = 25 * time.Millisecond  // 25 milliseconds
 )
 
 type TempHumidity struct {
@@ -34,13 +32,13 @@ func DoLoop(i2cBus int, channel chan TempHumidity, sleep time.Duration) {
 
     defer tempSensor.Close()
 
-    outBuffer := []byte {HTU31DSoftReset}
+    outBuffer := []byte {SoftReset}
     inBuffer := make([]byte, 6)
 
     _, err = tempSensor.WriteBytes(outBuffer)
     if err != nil { log.Printf("Error writing to Temp sensor %d\n", err) }
 
-    outBuffer = []byte {HTU31DReadSerial}
+    outBuffer = []byte {ReadSerial}
     _, err = tempSensor.WriteBytes(outBuffer)
     if err != nil { log.Printf("Error writing to Temp sensor %d\n", err) }
 
@@ -52,13 +50,13 @@ func DoLoop(i2cBus int, channel chan TempHumidity, sleep time.Duration) {
 
     for {
 
-        outBuffer = []byte {HTU31DConversion}
+        outBuffer = []byte {Conversion}
         _, err = tempSensor.WriteBytes(outBuffer)
         if err != nil { log.Printf("Error writing to Temp sensor %d\n", err) }
 
-        time.Sleep(HTU31DConversionPause * time.Millisecond)
+        time.Sleep(ConversionPause)
 
-        outBuffer = []byte {HTU31DReadTempHumid}
+        outBuffer = []byte {ReadTempHumid}
         _, err = tempSensor.WriteBytes(outBuffer)
         if err != nil { log.Printf("Error writing to Temp sensor %d\n", err) }
 
@@ -66,14 +64,59 @@ func DoLoop(i2cBus int, channel chan TempHumidity, sleep time.Duration) {
         if err != nil { log.Printf("Error reading from Temp sensor %d\n", err) }
 
         temperatureRaw := binary.BigEndian.Uint16(inBuffer[0:2])
-        temperature := -40 + 165 * float64(temperatureRaw) / (2<<15 - 1)
+        temperatureCRC := inBuffer[2]
+
+        crcValue := crc(uint32(temperatureRaw))
+
+        var temperature float64
+
+        if crcValue != temperatureCRC {
+            log.Printf("CRC incorrect for temperature, 0x%x != 0x%x", crcValue, temperatureCRC)
+            time.Sleep(sleep)
+            continue
+        }
+
+        temperature = -40 + 165*float64(temperatureRaw)/(2<<15-1)
 
         humidityRaw := binary.BigEndian.Uint16(inBuffer[3:5])
+        humidityCRC := inBuffer[5]
+
+        crcValue = crc(uint32(humidityRaw))
+
+        if crcValue != humidityCRC {
+            log.Printf("CRC incorrect for humidity, 0x%x != 0x%x", crcValue, humidityCRC)
+            time.Sleep(sleep)
+            continue
+        }
+
         humidity := 100 * float64(humidityRaw) / (2<<15 - 1)
 
         channel <- TempHumidity{temperature, humidity}
 
-        time.Sleep(10 * time.Second)
+        time.Sleep(sleep)
     }
 
+}
+
+
+func crc(input uint32) uint8 {
+
+    var polynom uint32 = 0x988000
+    var msb uint32 = 0x800000
+    var mask uint32 = 0xFF8000
+
+    result := input << 8
+
+    for msb != 0x80 {
+        if result & msb != 0 {
+            result = ((result ^ polynom) & mask) | (result & ^mask)
+        }
+
+        msb >>= 1
+        mask >>= 1
+        polynom >>= 1
+
+    }
+
+    return uint8(result)
 }
