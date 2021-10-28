@@ -48,6 +48,8 @@ func DoLoop(i2cBus int, channel chan TempHumidity, sleep time.Duration) {
     serial := binary.BigEndian.Uint32(inBuffer)
     log.Printf("serial %d\n", serial)
 
+    sleep = sleep - ConversionPause
+
     for {
 
         outBuffer = []byte {Conversion}
@@ -71,7 +73,7 @@ func DoLoop(i2cBus int, channel chan TempHumidity, sleep time.Duration) {
         var temperature float64
 
         if crcValue != temperatureCRC {
-            log.Printf("CRC incorrect for temperature, 0x%x != 0x%x", crcValue, temperatureCRC)
+            log.Printf("CRC incorrect for temperature, dev 0x%x != calc 0x%x", temperatureCRC, crcValue)
             time.Sleep(sleep)
             continue
         }
@@ -84,7 +86,7 @@ func DoLoop(i2cBus int, channel chan TempHumidity, sleep time.Duration) {
         crcValue = crc(uint32(humidityRaw))
 
         if crcValue != humidityCRC {
-            log.Printf("CRC incorrect for humidity, 0x%x != 0x%x", crcValue, humidityCRC)
+            log.Printf("CRC incorrect for humidity, dev 0x%x != calc 0x%x", humidityCRC, crcValue)
             time.Sleep(sleep)
             continue
         }

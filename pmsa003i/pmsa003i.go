@@ -8,6 +8,7 @@ import (
 )
 
 type PMSensorValue struct {
+    FrameLength uint16
     PM10std uint16
     PM25std uint16
     PM100std uint16
@@ -20,6 +21,8 @@ type PMSensorValue struct {
     Particles25um uint16
     Particles50um uint16
     Particles100um uint16
+    Version byte
+    ErrorCode byte
 }
 
 const (
@@ -40,7 +43,10 @@ func DoLoop(i2cBus int, channel chan PMSensorValue, sleep time.Duration) {
         _, err = sensor.ReadBytes(inBuffer)
         if err != nil { log.Printf("Error reading from Temp sensor %d\n", err) }
 
+        var checkSum uint16 = 0
+
         values := PMSensorValue{
+            binary.BigEndian.Uint16(inBuffer[2:4]),
             binary.BigEndian.Uint16(inBuffer[4:6]),
             binary.BigEndian.Uint16(inBuffer[6:8]),
             binary.BigEndian.Uint16(inBuffer[8:10]),
@@ -53,6 +59,21 @@ func DoLoop(i2cBus int, channel chan PMSensorValue, sleep time.Duration) {
             binary.BigEndian.Uint16(inBuffer[22:24]),
             binary.BigEndian.Uint16(inBuffer[24:26]),
             binary.BigEndian.Uint16(inBuffer[26:28]),
+            inBuffer[28],
+            inBuffer[29],
+        }
+
+        checkSum += 0x42
+        checkSum += 0x4d
+
+        for i := 2; i < 30; i++ {
+            checkSum += uint16(inBuffer[i])
+        }
+
+        devCheckSum := binary.BigEndian.Uint16(inBuffer[30:32])
+
+        if devCheckSum != checkSum {
+            log.Printf("Checksum mismatch dev 0x%x != calc 0x%x", devCheckSum, checkSum)
         }
 
         channel <- values
