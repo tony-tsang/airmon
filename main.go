@@ -4,13 +4,24 @@ import (
     htu31 "airmon/htu31"
     "airmon/metrics"
     pmsa003i "airmon/pmsa003i"
+    "flag"
+    "github.com/d2r2/go-logger"
     "log"
     "time"
 )
 
 func main() {
 
-    sleepDuration := 10 * time.Second
+    logger.ChangePackageLogLevel("i2c", logger.InfoLevel)
+
+    var sleepInterval int
+    var listenAddress string
+
+    flag.IntVar(&sleepInterval,"interval", 10, "sensor read interval in seconds")
+    flag.StringVar(&listenAddress, "listen", ":8080", "listen address for prometheus metrics")
+    flag.Parse()
+
+    sleepDuration := time.Duration(sleepInterval) * time.Second
 
     tempHumidityChannel := make(chan htu31.TempHumidity)
     go htu31.DoLoop(1, tempHumidityChannel, sleepDuration)
@@ -18,7 +29,7 @@ func main() {
     pmValueChannel := make(chan pmsa003i.PMSensorValue)
     go pmsa003i.DoLoop(1, pmValueChannel, sleepDuration)
 
-    go metrics.StartServer()
+    go metrics.StartServer(listenAddress)
 
     for {
         select {
@@ -35,14 +46,5 @@ func main() {
             default:
                 time.Sleep(1 * time.Second)
         }
-
-
-
-
-        //metrics := grafana_cloud.Metrics{TempHumidity: tempHumidity, PMValues: pmValue}
-
-
-
-
     }
 }

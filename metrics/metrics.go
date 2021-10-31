@@ -4,6 +4,7 @@ import (
     "github.com/prometheus/client_golang/prometheus"
     "github.com/prometheus/client_golang/prometheus/promauto"
     "github.com/prometheus/client_golang/prometheus/promhttp"
+    "log"
     "net/http"
 )
 
@@ -34,9 +35,12 @@ var (
     })
 )
 
-func StartServer() {
+func StartServer(addr string) {
 
     http.Handle("/metrics", promhttp.Handler())
-    http.ListenAndServe(":8080", nil)
+    err := http.ListenAndServe(addr, nil)
+    if err != nil {
+        log.Fatal("Error listening socket, ", err)
+    }
 
 }

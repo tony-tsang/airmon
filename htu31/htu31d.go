@@ -36,11 +36,11 @@ func DoLoop(i2cBus int, channel chan TempHumidity, sleep time.Duration) {
     inBuffer := make([]byte, 6)
 
     _, err = tempSensor.WriteBytes(outBuffer)
-    if err != nil { log.Printf("Error writing to Temp sensor %d\n", err) }
+    if err != nil { log.Printf("Error writing reset to Temp sensor %d\n", err) }
 
     outBuffer = []byte {ReadSerial}
     _, err = tempSensor.WriteBytes(outBuffer)
-    if err != nil { log.Printf("Error writing to Temp sensor %d\n", err) }
+    if err != nil { log.Printf("Error writing readserial to Temp sensor %d\n", err) }
 
     _, err = tempSensor.ReadBytes(inBuffer)
     if err != nil { log.Printf("Error reading from Temp sensor %d\n", err) }
