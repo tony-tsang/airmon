@@ -21,17 +21,32 @@ var (
 
     PM10StdMetric = promauto.NewGauge(prometheus.GaugeOpts{
         Name: "pm10std",
-        Help: "PM1.0",
+        Help: "PM1.0 Standard",
     })
 
     PM25StdMetric = promauto.NewGauge(prometheus.GaugeOpts{
         Name: "pm25std",
-        Help: "PM2.5",
+        Help: "PM2.5 Standard",
     })
 
     PM100StdMetric = promauto.NewGauge(prometheus.GaugeOpts{
         Name: "pm100std",
-        Help: "PM10",
+        Help: "PM10 Standard",
+    })
+
+    PM10Concentration = promauto.NewGauge(prometheus.GaugeOpts{
+        Name: "pm10concentration",
+        Help: "PM1.0 Concentration",
+    })
+
+    PM25Concentration = promauto.NewGauge(prometheus.GaugeOpts{
+        Name: "pm25concentration",
+        Help: "PM2.5 Concentration",
+    })
+
+    PM100Concentration = promauto.NewGauge(prometheus.GaugeOpts{
+        Name: "pm100concentration",
+        Help: "PM10 Concentration",
     })
 )
 

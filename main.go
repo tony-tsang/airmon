@@ -43,6 +43,9 @@ func main() {
                 metrics.PM10StdMetric.Set(float64(pmValue.PM10std))
                 metrics.PM25StdMetric.Set(float64(pmValue.PM25std))
                 metrics.PM100StdMetric.Set(float64(pmValue.PM100std))
+                metrics.PM10Concentration.Set(float64(pmValue.PM10env))
+                metrics.PM25Concentration.Set(float64(pmValue.PM25env))
+                metrics.PM100Concentration.Set(float64(pmValue.PM100env))
             default:
                 time.Sleep(1 * time.Second)
         }
