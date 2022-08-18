@@ -1,18 +1,53 @@
 package main
 
 import (
-    htu31 "airmon/htu31"
-    "airmon/metrics"
-    pmsa003i "airmon/pmsa003i"
     "flag"
     "github.com/d2r2/go-logger"
     "log"
     "time"
+    "periph.io/x/host/v3"
+    "periph.io/x/conn/v3/physic"
+    "periph.io/x/conn/v3/driver/driverreg"
+    "periph.io/x/conn/v3/spi"
+    "periph.io/x/conn/v3/spi/spireg"
+    // "periph.io/x/conn/v3/i2c"
+    "periph.io/x/conn/v3/i2c/i2creg"
+    // "periph.io/x/conn/v3/gpio"
+    // "periph.io/x/conn/v3/gpio/gpioreg"
+
+    "github.com/tony-tsang/airmon/internal/pkg/htu31"
+    "github.com/tony-tsang/airmon/internal/pkg/metrics"
+    "github.com/tony-tsang/airmon/internal/pkg/pmsa003i"
 )
 
 func main() {
 
     logger.ChangePackageLogLevel("i2c", logger.InfoLevel)
+
+    _, err := host.Init()
+    if err != nil {
+		log.Fatalf("failed to initialize periph: %v", err)
+	}
+
+    _, err = driverreg.Init()
+    if err != nil {
+        log.Fatalf("failed to initialize periph: %v", err)
+    }
+
+    spi_bus, err := spireg.Open("")
+    if err != nil {
+        log.Fatalf("failed to open SPI: %v", err)
+    }
+
+    i2c_bus, err := i2creg.Open("")
+    if err != nil {
+        log.Fatalf("failed to open I2C: %v", err)
+    }
+    
+    defer spi_bus.Close()
+    defer i2c_bus.Close()
+    
+    _, err = spi_bus.Connect(physic.MegaHertz, spi.Mode3, 8)
 
     var sleepInterval int
     var listenAddress string
