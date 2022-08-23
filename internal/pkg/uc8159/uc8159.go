@@ -18,7 +18,6 @@ const (
 	RESET_PIN = "GPIO27"
 	BUSY_PIN = "GPIO17"
 	DC_PIN = "GPIO22"
-
 	CS0_PIN = "GPIO8"
 )
 
@@ -58,55 +57,67 @@ const bufSz = Width / 2 * Height
 
 type Display struct {
 	spiBus spi.Conn
-	buffer []uint8
+	buffer []byte
 	reset gpio.PinIO
 	busy gpio.PinIO
 	dc gpio.PinIO
 	cs gpio.PinIO
 }
 
-func (d Display) Width() uint16 {
+func (d *Display) Width() uint16 {
 	return Width
 }
 
-func (d Display) Height() uint16 {
+func (d *Display) Height() uint16 {
 	return Height
 }
 
-func (d Display) Init(spiBus spi.Conn) {
+func (d *Display) Init(spiBus spi.Conn) {
 	
-	d.buffer = make([]uint8, bufSz)
+	d.buffer = make([]byte, bufSz)
 	d.spiBus = spiBus
 
 	d.reset = gpioreg.ByName(RESET_PIN)
+	if d.reset == nil {
+		log.Fatalf("Unable to find %s", RESET_PIN)
+	}
 	d.reset.Out(gpio.High)
 
 	d.dc = gpioreg.ByName(DC_PIN)
+	if d.dc == nil {
+		log.Fatalf("Unable to find %s", DC_PIN)
+	}
 	d.dc.Out(gpio.Low)
 
 	d.cs = gpioreg.ByName(CS0_PIN)
+	if d.cs == nil {
+		log.Fatalf("Unable to find %s", CS0_PIN)
+	}
 	d.cs.Out(gpio.High)
 
 	d.busy = gpioreg.ByName(BUSY_PIN)
+	if d.busy == nil {
+		log.Fatalf("Unable to find %s", BUSY_PIN)
+	}
 	d.busy.In(gpio.PullDown, gpio.NoEdge)
 
 	d.Reset()
 }
 
-func (d Display) Reset() {
+func (d *Display) Reset() {
 	d.reset.Out(gpio.Low)
 	time.Sleep(100 * time.Millisecond)
 	d.reset.Out(gpio.High)
 
 }
 
-func (d Display) Fill() {
+func (d *Display) Fill() {
 	for i := range d.buffer {
-		d.buffer[i] = 0x2
+		d.buffer[i] = 0x2 & 0x07
 	}
 }
 
-func (d Display) busyWait(milliseconds int) {
+func (d *Display) busyWait(milliseconds int) {
 	duration := time.Duration(milliseconds) * time.Millisecond
 
 	if (d.busy.Read() == gpio.High) {
@@ -132,10 +143,11 @@ func (d Display) busyWait(milliseconds int) {
 
 }
 
-func (d Display) sendCommand(cmd uint8, data *[]uint8) {
+func (d *Display) sendCommand(cmd byte, data *[]byte) {
 
-	buf := make([]uint8, 1)
+	buf := make([]byte, 1)
 	buf[0] = cmd
+	log.Printf("cmd = %v", cmd)
 	d.spiWrite(SPI_COMMAND, &buf)
 
 	if data != nil {
@@ -143,27 +155,35 @@ func (d Display) sendCommand(cmd uint8, data *[]uint8) {
 	}
 }
 
-func (d Display) updateScreen() {
+func (d *Display) UpdateScreen() {
+	log.Printf("sending DTM1")
 	d.sendCommand(DTM1, &d.buffer)
 
+	log.Printf("sending PON")
 	d.sendCommand(PON, nil)
 	d.busyWait(200)
 
+	log.Printf("sending DRF")
 	d.sendCommand(DRF, nil)
 	d.busyWait(32000)
 
+	log.Printf("sending POF")
 	d.sendCommand(POF, nil)
 	d.busyWait(200)
 }
 
-func (d Display) spiWrite(dc gpio.Level, data *[]uint8) {
+func (d *Display) spiWrite(dc gpio.Level, data *[]byte) {
 	
-	read := make([]uint8, 0)
+	read := make([]byte, 0)
 
+	// log.Printf("d = %v", d)
+	log.Printf("CS low")
 	d.cs.Out(gpio.Low)
+	log.Printf("dc = %v", dc)
 	d.dc.Out(dc)
 
 	d.spiBus.Tx(*data, read)
 
+	log.Printf("CS High")
 	d.cs.Out(gpio.High)	
 }

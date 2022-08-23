@@ -31,12 +31,12 @@ func main() {
         log.Fatalf("failed to initialize periph: %v", err)
     }
 
-    spi_bus, err := spireg.Open("")
+    spi_bus, err := spireg.Open("spi0")
     if err != nil {
         log.Fatalf("failed to open SPI: %v", err)
     }
 
-    i2c_bus, err := i2creg.Open("")
+    i2c_bus, err := i2creg.Open("0")
     if err != nil {
         log.Fatalf("failed to open I2C: %v", err)
     }
@@ -46,6 +46,10 @@ func main() {
     
     spi_channel, err := spi_bus.Connect(physic.MegaHertz, spi.Mode3, 8)
 
-	var d uc8159.Display
+	d := new(uc8159.Display)
 	d.Init(spi_channel)
+
+    d.Fill()
+
+    d.UpdateScreen()
 }
