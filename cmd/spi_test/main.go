@@ -1,23 +1,21 @@
 package main
 
 import (
-    // "flag"
     "log"
-    // "time"
+    "image"
+    "os"
+    "image/color"
+    _ "image/jpeg"
+
     "periph.io/x/host/v3"
     "periph.io/x/conn/v3/physic"
-    // "periph.io/x/conn/v3/driver/driverreg"
     "periph.io/x/conn/v3/spi"
     "periph.io/x/conn/v3/spi/spireg"
-    // "periph.io/x/conn/v3/i2c"
     "periph.io/x/conn/v3/i2c/i2creg"
-    // "periph.io/x/conn/v3/gpio"
-    // "periph.io/x/conn/v3/gpio/gpioreg"
+    "github.com/makeworld-the-better-one/dither/v2"
 
-    // "github.com/tony-tsang/airmon/internal/pkg/htu31"
-    // "github.com/tony-tsang/airmon/internal/pkg/metrics"
-    // "github.com/tony-tsang/airmon/internal/pkg/pmsa003i"
-	"github.com/tony-tsang/airmon/internal/pkg/uc8159"
+    "github.com/tony-tsang/airmon/internal/pkg/uc8159"
+
 )
 
 func main() {
@@ -61,7 +59,58 @@ func main() {
 	d := new(uc8159.Display)
 	d.Init(spi_channel)
 
-    d.Fill()
+    imageFile, err := os.Open("sample.jpg")
+
+    defer imageFile.Close()
+
+    if err != nil {
+        log.Fatalf("Error: %v", err)
+    }
+
+    imageData, _, err := image.Decode(imageFile)
+
+    if err != nil {
+        log.Fatalf("Error: %v", err)
+    }
+
+    palette := []color.Color{
+        color.RGBA{0, 0, 0, 0xFF},
+        color.RGBA{255, 255, 255, 0xFF},
+        color.RGBA{0, 255, 0, 0xFF},
+        color.RGBA{0, 0, 255, 0xFF},
+        color.RGBA{255, 0, 0, 0xFF},
+        color.RGBA{255, 255, 0, 0xFF},
+        color.RGBA{255, 140, 0, 0xFF},
+        color.RGBA{255, 255, 255, 0xFF},
+    }
+
+    ditherer := dither.NewDitherer(palette)
+
+    ditherer.Matrix = dither.FloydSteinberg
+
+    img := ditherer.Dither(imageData)
+
+    // log.Printf("%v", img)
+
+    for y := 0; y < 400; y++ {
+        for x := 0; x < 640; x++ {
+            color := img.At(x, y)
+            index := matchPalette(palette, color)
+            d.SetPixel(x, y, uc8159.Color(index))
+        }
+    }
+    
+    //d.Fill(uc8159.WHITE)
 
     d.UpdateScreen()
+}
+
+func matchPalette(palette []color.Color, pixel color.Color) int {
+    for i, color := range palette {
+        if color == pixel {
+            return i
+        }
+    }
+
+    return 0
 }

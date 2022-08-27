@@ -28,6 +28,19 @@ const (
 	SPI_CHUNK_SIZE = 4096
 )
 
+type Color byte
+
+const (
+	BLACK Color = 0
+    WHITE Color = 1
+    GREEN Color = 2
+    BLUE Color = 3
+    RED Color = 4
+    YELLOW Color = 5
+    ORANGE Color = 6
+    CLEAN Color = 7
+)
+
 const (
 	PSR = 0x00
 	PWR = 0x01
@@ -166,25 +179,23 @@ func (d *Display) setup() {
 
 }
 
-func (d *Display) SetPixel(x int, y int, color byte) {
+func (d *Display) SetPixel(x int, y int, color Color) {
 
 	pos := int(Width / 2) * y + int(x / 2)
 	
 	if x & 1 == 0 {
 		// set high bits
-		d.buffer[pos] = (d.buffer[pos] & 0x0F) | ((color & 0x0F) << 4)
+		d.buffer[pos] = (d.buffer[pos] & 0x0F) | ((byte(color) & 0x0F) << 4)
 	} else {
 		// set low bits
-		d.buffer[pos] = (d.buffer[pos] & 0xF0) | (color & 0x0F)
+		d.buffer[pos] = (d.buffer[pos] & 0xF0) | (byte(color) & 0x0F)
 	}
-
-	// log.Printf("d.buffer[%v] = %v", pos, d.buffer[pos])
 }
 
-func (d *Display) Fill() {
+func (d *Display) Fill(color Color) {
 	for y := 0; y < 400; y++ {
 		for x := 0; x < 640; x++ {
-			d.SetPixel(x, y, 6)
+			d.SetPixel(x, y, color)
 		}
 	}
 }
@@ -221,11 +232,10 @@ func (d *Display) busyWait(milliseconds int) {
 func (d *Display) sendCommand(cmd byte, data []byte) {
 
 	buf := []byte{ cmd }
-	log.Printf("cmd = 0x%X", cmd)
+	// log.Printf("cmd = 0x%X", cmd)
 	d.spiWrite(SPI_COMMAND, buf)
 
 	if data != nil {
-		// log.Printf("data = %v", data)
 		d.spiWrite(SPI_DATA, data)
 	}
 }
@@ -273,7 +283,6 @@ func (d *Display) spiWrite(dc gpio.Level, data []byte) {
 			end = i + SPI_CHUNK_SIZE
 		}
 
-		// log.Printf("spi TX data: %v", data[i:end])
 		d.spiBus.Tx(data[i:end], nil)
 
 		i += SPI_CHUNK_SIZE
