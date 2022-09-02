@@ -1,28 +1,27 @@
 package main
 
 import (
-    "log"
     "image"
-    "os"
     "image/color"
     _ "image/jpeg"
+    "log"
+    "os"
 
-    "periph.io/x/host/v3"
+    "github.com/makeworld-the-better-one/dither/v2"
+    "periph.io/x/conn/v3/i2c/i2creg"
     "periph.io/x/conn/v3/physic"
     "periph.io/x/conn/v3/spi"
     "periph.io/x/conn/v3/spi/spireg"
-    "periph.io/x/conn/v3/i2c/i2creg"
-    "github.com/makeworld-the-better-one/dither/v2"
+    "periph.io/x/host/v3"
 
     "github.com/tony-tsang/airmon/internal/pkg/uc8159"
-
 )
 
 func main() {
-	state, err := host.Init()
+    state, err := host.Init()
     if err != nil {
-		log.Fatalf("failed to initialize periph: %v", err)
-	}
+        log.Fatalf("failed to initialize periph: %v", err)
+    }
 
     log.Printf("Using drivers:\n")
     for _, driver := range state.Loaded {
@@ -34,32 +33,38 @@ func main() {
     //     log.Fatalf("failed to initialize periph: %v", err)
     // }
 
-    spi_bus, err := spireg.Open("")
+    spiBus, err := spireg.Open("")
     if err != nil {
         log.Fatalf("failed to open SPI: %v", err)
     }
 
-    i2c_bus, err := i2creg.Open("")
+    i2cBus, err := i2creg.Open("")
     if err != nil {
         log.Fatalf("failed to open I2C: %v", err)
     }
-    
-    defer spi_bus.Close()
-    defer i2c_bus.Close()
-    
-    spi_channel, err := spi_bus.Connect(physic.MegaHertz, spi.Mode3 | spi.NoCS, 8)
 
-    if p, ok := spi_channel.(spi.Pins); ok {
+    defer spiBus.Close()
+    defer i2cBus.Close()
+
+    spiChannel, err := spiBus.Connect(physic.MegaHertz, spi.Mode3|spi.NoCS, 8)
+
+    if p, ok := spiChannel.(spi.Pins); ok {
         log.Printf("  CLK : %s", p.CLK())
-		log.Printf("  MOSI: %s", p.MOSI())
-		log.Printf("  MISO: %s", p.MISO())
-		log.Printf("  CS  : %s", p.CS())
+        log.Printf("  MOSI: %s", p.MOSI())
+        log.Printf("  MISO: %s", p.MISO())
+        log.Printf("  CS  : %s", p.CS())
     }
 
-	d := new(uc8159.Display)
-	d.Init(spi_channel)
+    d := new(uc8159.Display)
+    d.Init(spiChannel)
 
-    imageFile, err := os.Open("sample.jpg")
+    if len(os.Args) < 2 {
+        log.Fatal("no file supplied")
+    }
+
+    filename := os.Args[1]
+
+    imageFile, err := os.Open(filename)
 
     defer imageFile.Close()
 
@@ -86,7 +91,8 @@ func main() {
 
     ditherer := dither.NewDitherer(palette)
 
-    ditherer.Matrix = dither.FloydSteinberg
+    ditherer.Matrix = dither.JarvisJudiceNinke
+    //ditherer.Matrix = dither.FloydSteinberg
 
     img := ditherer.Dither(imageData)
 
@@ -94,20 +100,20 @@ func main() {
 
     for y := 0; y < 400; y++ {
         for x := 0; x < 640; x++ {
-            color := img.At(x, y)
-            index := matchPalette(palette, color)
+            pixel := img.At(x, y)
+            index := matchPalette(palette, pixel)
             d.SetPixel(x, y, uc8159.Color(index))
         }
     }
-    
+
     //d.Fill(uc8159.WHITE)
 
     d.UpdateScreen()
 }
 
 func matchPalette(palette []color.Color, pixel color.Color) int {
-    for i, color := range palette {
-        if color == pixel {
+    for i, paletteColor := range palette {
+        if paletteColor == pixel {
             return i
         }
     }

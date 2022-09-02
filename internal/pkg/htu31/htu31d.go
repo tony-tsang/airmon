@@ -1,148 +1,160 @@
 package htu31
 
 import (
-	"encoding/binary"
-	"github.com/d2r2/go-i2c"
-	"log"
-	"time"
+    "encoding/binary"
+    "log"
+    "time"
+
+    "periph.io/x/conn/v3/i2c"
 )
 
 const (
-	TempSensorAddr uint8 = 0x40
+    sensorAddr uint16 = 0x0040
 
-	SoftReset     = 0x1E
-	ReadSerial    = 0x0A
-	Conversion    = 0x5E
-	ReadTempHumid = 0x00
-	HeaterOff     = 0x02
+    SoftReset     = 0x1E
+    ReadSerial    = 0x0A
+    Conversion    = 0x5E
+    ReadTempHumid = 0x00
+    HeaterOff     = 0x02
 
-	ConversionPause = 25 * time.Millisecond // 25 milliseconds
+    ConversionPause = 25 * time.Millisecond // 25 milliseconds
 )
 
 type TempHumidity struct {
-	Temp     float64
-	Humidity float64
+    Temp     float64
+    Humidity float64
 }
 
-func DoLoop(i2cBus int, channel chan TempHumidity, sleep time.Duration) {
+type Device struct {
+    dev *i2c.Dev
+}
 
-	tempSensor, err := i2c.NewI2C(TempSensorAddr, i2cBus)
-	if err != nil {
-		log.Fatal(err)
-	}
+func New(i2cBus i2c.Bus) *Device {
+    d := new(Device)
+    d.dev = &i2c.Dev{Addr: sensorAddr, Bus: i2cBus}
+    return d
+}
 
-	defer tempSensor.Close()
+func (d *Device) SoftReset() {
+    outBuffer := []byte{SoftReset}
+    err := d.dev.Tx(outBuffer, nil)
+    if err != nil {
+        log.Printf("Error writing reset to Temp sensor %d\n", err)
+    }
+}
 
-	outBuffer := []byte{SoftReset}
-	inBuffer := make([]byte, 6)
+func (d *Device) HeaterOff() {
+    outBuffer := []byte{HeaterOff}
+    err := d.dev.Tx(outBuffer, nil)
+    if err != nil {
+        log.Printf("Error writing HeaterOff to Temp sensor %d\n", err)
+    }
+}
 
-	_, err = tempSensor.WriteBytes(outBuffer)
-	if err != nil {
-		log.Printf("Error writing reset to Temp sensor %d\n", err)
-	}
+func (d *Device) ReadSerial() uint32 {
+    inBuffer := make([]byte, 6)
+    outBuffer := []byte{ReadSerial}
+    err := d.dev.Tx(outBuffer, inBuffer)
+    if err != nil {
+        log.Printf("Error reading from Temp sensor %d\n", err)
+    }
 
-	time.Sleep(500 * time.Millisecond)
+    serial := binary.BigEndian.Uint32(inBuffer)
+    return serial
+}
 
-	outBuffer = []byte{HeaterOff}
-	_, err = tempSensor.WriteBytes(outBuffer)
-	if err != nil {
-		log.Printf("Error writing HeaterOff to Temp sensor %d\n", err)
-	}
+func (d *Device) Conversion() {
+    outBuffer := []byte{Conversion}
+    err := d.dev.Tx(outBuffer, nil)
+    if err != nil {
+        log.Printf("Error writing to Temp sensor %d\n", err)
+    }
+}
 
-	time.Sleep(1 * time.Second)
+func (d *Device) ReadTempHumid() (float64, float64) {
 
-	outBuffer = []byte{ReadSerial}
-	_, err = tempSensor.WriteBytes(outBuffer)
-	if err != nil {
-		log.Printf("Error writing readserial to Temp sensor %d\n", err)
-	}
+    outBuffer := []byte{ReadTempHumid}
+    inBuffer := make([]byte, 6)
+    err := d.dev.Tx(outBuffer, inBuffer)
+    if err != nil {
+        log.Printf("Error writing to Temp sensor %d\n", err)
+    }
 
-	_, err = tempSensor.ReadBytes(inBuffer)
-	if err != nil {
-		log.Printf("Error reading from Temp sensor %d\n", err)
-	}
+    temperatureRaw := binary.BigEndian.Uint16(inBuffer[0:2])
+    temperatureCRC := inBuffer[2]
 
-	serial := binary.BigEndian.Uint32(inBuffer)
-	log.Printf("serial %d\n", serial)
+    crcValue := crc(uint32(temperatureRaw))
 
-	sleep = sleep - ConversionPause
+    var temperature float64
 
-	for {
+    if crcValue != temperatureCRC {
+        log.Printf("CRC incorrect for temperature, dev 0x%x != calc 0x%x", temperatureCRC, crcValue)
+    }
 
-		outBuffer = []byte{Conversion}
-		_, err = tempSensor.WriteBytes(outBuffer)
-		if err != nil {
-			log.Printf("Error writing to Temp sensor %d\n", err)
-		}
+    //log.Printf("temperature Raw = 0x%x %d", temperatureRaw, temperatureRaw)
 
-		time.Sleep(ConversionPause)
+    temperature = -40 + 165*float64(temperatureRaw)/(2<<15-1)
 
-		outBuffer = []byte{ReadTempHumid}
-		_, err = tempSensor.WriteBytes(outBuffer)
-		if err != nil {
-			log.Printf("Error writing to Temp sensor %d\n", err)
-		}
+    humidityRaw := binary.BigEndian.Uint16(inBuffer[3:5])
+    humidityCRC := inBuffer[5]
 
-		_, err = tempSensor.ReadBytes(inBuffer)
-		if err != nil {
-			log.Printf("Error reading from Temp sensor %d\n", err)
-		}
+    crcValue = crc(uint32(humidityRaw))
 
-		temperatureRaw := binary.BigEndian.Uint16(inBuffer[0:2])
-		temperatureCRC := inBuffer[2]
+    if crcValue != humidityCRC {
+        log.Printf("CRC incorrect for humidity, dev 0x%x != calc 0x%x", humidityCRC, crcValue)
+    }
 
-		crcValue := crc(uint32(temperatureRaw))
+    humidity := 100 * float64(humidityRaw) / (2<<15 - 1)
 
-		var temperature float64
+    return temperature, humidity
+}
 
-		if crcValue != temperatureCRC {
-			log.Printf("CRC incorrect for temperature, dev 0x%x != calc 0x%x", temperatureCRC, crcValue)
-			time.Sleep(sleep)
-			continue
-		}
+func DoLoop(i2cBus i2c.Bus, channel chan TempHumidity, sleep time.Duration) {
 
-		//log.Printf("temperature Raw = 0x%x %d", temperatureRaw, temperatureRaw)
+    d := New(i2cBus)
 
-		temperature = -40 + 165*float64(temperatureRaw)/(2<<15-1)
+    d.SoftReset()
+    time.Sleep(500 * time.Millisecond)
+    d.HeaterOff()
+    time.Sleep(1 * time.Second)
 
-		humidityRaw := binary.BigEndian.Uint16(inBuffer[3:5])
-		humidityCRC := inBuffer[5]
+    serial := d.ReadSerial()
+    log.Printf("serial %d\n", serial)
 
-		crcValue = crc(uint32(humidityRaw))
+    sleep = sleep - ConversionPause
 
-		if crcValue != humidityCRC {
-			log.Printf("CRC incorrect for humidity, dev 0x%x != calc 0x%x", humidityCRC, crcValue)
-			time.Sleep(sleep)
-			continue
-		}
+    for {
+        d.Conversion()
 
-		humidity := 100 * float64(humidityRaw) / (2<<15 - 1)
+        time.Sleep(ConversionPause)
 
-		channel <- TempHumidity{temperature, humidity}
+        temperature, humidity := d.ReadTempHumid()
 
-		time.Sleep(sleep)
-	}
+        channel <- TempHumidity{temperature, humidity}
+
+        time.Sleep(sleep)
+    }
 
 }
 
 func crc(input uint32) uint8 {
 
-	var polynom uint32 = 0x988000
-	var msb uint32 = 0x800000
-	var mask uint32 = 0xFF8000
+    var polynom uint32 = 0x988000
+    var msb uint32 = 0x800000
+    var mask uint32 = 0xFF8000
 
-	result := input << 8
+    result := input << 8
 
-	for msb != 0x80 {
-		if result&msb != 0 {
-			result = ((result ^ polynom) & mask) | (result & ^mask)
-		}
+    for msb != 0x80 {
+        if result&msb != 0 {
+            result = ((result ^ polynom) & mask) | (result & ^mask)
+        }
 
-		msb >>= 1
-		mask >>= 1
-		polynom >>= 1
+        msb >>= 1
+        mask >>= 1
+        polynom >>= 1
 
-	}
+    }
 
-	return uint8(result)
+    return uint8(result)
 }
