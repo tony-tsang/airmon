@@ -1,4 +1,4 @@
-package test_dps310
+package main
 
 import (
     "fmt"
