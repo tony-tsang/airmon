@@ -34,7 +34,9 @@ func main() {
 
     for {
         pressure := sensor.GetPressure()
-        fmt.Printf("pressure: %v", pressure)
+        fmt.Printf("pressure: %0.2f\n", pressure)
+        temperature := sensor.GetTemperature()
+        fmt.Printf("temperature: %0.2f\n", temperature)
         time.Sleep(1 * time.Second)
     }
 }
