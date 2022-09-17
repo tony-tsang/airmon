@@ -2,6 +2,7 @@ package main
 
 import (
     "flag"
+    "github.com/tony-tsang/airmon/internal/pkg/dps310"
     "log"
     "time"
 
@@ -59,6 +60,9 @@ func main() {
     pmValueChannel := make(chan pmsa003i.PMSensorValue)
     go pmsa003i.DoLoop(i2cBus, pmValueChannel, sleepDuration)
 
+    pressureSensorChannel := make(chan dps310.TempPressure)
+    go dps310.DoLoop(i2cBus, pressureSensorChannel, sleepDuration)
+
     go metrics.StartServer(listenAddress)
 
     for {
@@ -76,6 +80,9 @@ func main() {
             metrics.PM10Concentration.Set(float64(pmValue.PM10env))
             metrics.PM25Concentration.Set(float64(pmValue.PM25env))
             metrics.PM100Concentration.Set(float64(pmValue.PM100env))
+        case pressureValue := <-pressureSensorChannel:
+            log.Printf("Presssure %0.2g Temperature %0.2g", pressureValue.Pressure, pressureValue.Temp)
+            metrics.PressureMetric.Set(pressureValue.Pressure)
         default:
             time.Sleep(1 * time.Second)
         }

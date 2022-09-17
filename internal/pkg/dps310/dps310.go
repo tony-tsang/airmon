@@ -83,6 +83,11 @@ func New(i2cBus i2c.Bus) *DPS310 {
     return d
 }
 
+type TempPressure struct {
+    Temp     float64
+    Pressure float64
+}
+
 func (d *DPS310) setCfgRegisterBit(bit byte, val bool) {
     if val {
         d.setRegisterBits(CFGREG, bit, 1, 1)
@@ -327,4 +332,18 @@ func (d *DPS310) GetTemperature() float64 {
     scaledRawTemp := float64(rawTemperature) / float64(d.temperatureScale)
     temperature := scaledRawTemp*float64(d.c1) + float64(d.c0)/2.0
     return temperature
+}
+
+func DoLoop(i2cBus i2c.Bus, channel chan TempPressure, sleep time.Duration) {
+
+    d := New(i2cBus)
+
+    for {
+        temperature := d.GetTemperature()
+        pressure := d.GetPressure()
+
+        channel <- TempPressure{Temp: temperature, Pressure: pressure}
+
+        time.Sleep(sleep)
+    }
 }

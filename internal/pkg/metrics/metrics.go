@@ -48,6 +48,11 @@ var (
         Name: "pm100concentration",
         Help: "PM10 Concentration",
     })
+
+    PressureMetric = promauto.NewGauge(prometheus.GaugeOpts{
+        Name: "pressure",
+        Help: "Atmospheric pressure",
+    })
 )
 
 func StartServer(addr string) {
