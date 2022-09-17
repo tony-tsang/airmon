@@ -203,7 +203,7 @@ func (d *Display) Fill(color Color) {
 func (d *Display) busyWait(milliseconds int) {
     duration := time.Duration(milliseconds) * time.Millisecond
 
-    log.Printf("start busy wait")
+    //log.Printf("start busy wait")
 
     if d.busy.Read() == gpio.High {
         // device is not busy
@@ -226,7 +226,7 @@ func (d *Display) busyWait(milliseconds int) {
         }
     }
 
-    log.Printf("end busy wait")
+    //log.Printf("end busy wait")
 }
 
 func (d *Display) sendCommand(cmd byte, data []byte) {
@@ -244,7 +244,7 @@ func (d *Display) UpdateScreen() {
 
     d.setup()
 
-    log.Printf("sending DTM1")
+    //log.Printf("sending DTM1")
     d.sendCommand(DTM1, d.buffer)
     d.busyWait(200)
 
@@ -252,15 +252,15 @@ func (d *Display) UpdateScreen() {
     // d.sendCommand(DSP, nil)
     // d.busyWait(200)
 
-    log.Printf("sending PON")
+    //log.Printf("sending PON")
     d.sendCommand(PON, nil)
     d.busyWait(200)
 
-    log.Printf("sending DRF")
+    //log.Printf("sending DRF")
     d.sendCommand(DRF, nil)
     d.busyWait(32000)
 
-    log.Printf("sending POF")
+    //log.Printf("sending POF")
     d.sendCommand(POF, nil)
     d.busyWait(200)
 }
