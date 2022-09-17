@@ -30,7 +30,6 @@ func main() {
     defer i2cBus.Close()
 
     sensor := dps310.New(i2cBus)
-    sensor.Init()
 
     for {
         pressure := sensor.GetPressure()
