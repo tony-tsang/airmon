@@ -84,66 +84,25 @@ func New(i2cBus i2c.Bus) *DPS310 {
 }
 
 func (d *DPS310) setCfgRegisterBit(bit byte, val bool) {
-
-    outBuf := []byte{CFGREG}
-    inBuf := make([]byte, 1)
-
-    err := d.dev.Tx(outBuf, inBuf)
-    if err != nil {
-        log.Printf("Error writing to sensor %d\n", err)
-    }
-
-    log.Printf("bit = %v, val = %v", bit, val)
-    log.Printf("inBuf = %08b", inBuf[0])
     if val {
-        inBuf[0] |= byte(1 << bit)
+        d.setRegisterBits(CFGREG, bit, 1, 1)
     } else {
-        inBuf[0] &= 0xFF ^ byte(1<<bit)
-    }
-
-    log.Printf("inBuf = %08b", inBuf[0])
-    outBuf = []byte{CFGREG, inBuf[0]}
-    err = d.dev.Tx(outBuf, nil)
-    if err != nil {
-        log.Printf("Error writing to sensor %d\n", err)
+        d.setRegisterBits(CFGREG, bit, 1, 0)
     }
 }
 
 func (d *DPS310) setPressureCfg() {
-    log.Printf("setPressureCfg")
-    val := byte(0b0110)
-    outBuf := []byte{PRSCFG, val}
-    err := d.dev.Tx(outBuf, nil)
-    if err != nil {
-        log.Printf("Error writing to sensor %d\n", err)
-    }
-
+    d.setRegisterBits(PRSCFG, 0, 4, 0b0110)
     d.setCfgRegisterBit(2, true)
 }
 
 func (d *DPS310) setTemperatureCfg() {
 
-    val := byte(0b0110)
-    outBuf := []byte{TMPCFG, val}
-    currentVal := make([]byte, 1)
-    err := d.dev.Tx(outBuf, currentVal)
-
-    if err != nil {
-        log.Printf("Error writing to sensor %d\n", err)
-    }
-
-    currentVal[0] = currentVal[0] | val
-    outBuf = []byte{TMPCFG, currentVal[0]}
-    err = d.dev.Tx(outBuf, nil)
-
-    if err != nil {
-        log.Printf("Error writing to sensor %d\n", err)
-    }
-
+    d.setRegisterBits(TMPCFG, 0, 4, 0b0110)
     d.setCfgRegisterBit(3, true)
 }
 
-func (d *DPS310) setCfgBits(cmd, offset, length, val byte) {
+func (d *DPS310) setRegisterBits(cmd, offset, length, val byte) {
 
     outBuf := []byte{cmd}
     inBuf := make([]byte, 1)
@@ -156,16 +115,9 @@ func (d *DPS310) setCfgBits(cmd, offset, length, val byte) {
     for i := offset; i < offset+length; i++ {
         bitmask |= 1 << i
     }
-    log.Printf("cmd = %02x, offset %v, length %v, bitmask = %08b, val = %08b", cmd, offset, length, bitmask, val)
 
     currentVal := inBuf[0]
-
-    log.Printf("currentVal = %08b", currentVal)
-
     currentVal |= (currentVal & ^bitmask) | val<<offset
-
-    log.Printf("currentVal = %08b", currentVal)
-
     outBuf = []byte{cmd, currentVal}
     err = d.dev.Tx(outBuf, nil)
     if err != nil {
@@ -173,14 +125,30 @@ func (d *DPS310) setCfgBits(cmd, offset, length, val byte) {
     }
 }
 
+func (d *DPS310) getRegisterBits(cmd, offset, length byte) byte {
+    outBuf := []byte{cmd}
+    inBuf := make([]byte, 1)
+
+    err := d.dev.Tx(outBuf, inBuf)
+    if err != nil {
+        log.Printf("Error writing to sensor %d\n", err)
+    }
+
+    bitmask := byte(0)
+    for i := offset; i < offset+length; i++ {
+        bitmask |= 1 << i
+    }
+
+    returnVal := (inBuf[0] & bitmask) >> offset
+    return returnVal
+}
+
 func (d *DPS310) setMode() {
-    log.Printf("setMode")
-    d.setCfgBits(MEASCFG, 0, 3, CONTINUOUS_TEMP_PRESSURE_MEASURE)
+    d.setRegisterBits(MEASCFG, 0, 3, CONTINUOUS_TEMP_PRESSURE_MEASURE)
 }
 
 func (d *DPS310) init() {
-    log.Printf("dps310 init")
-    d.readProductRevID()
+    log.Printf("prod rev id = %v", d.GetProductRevID())
     d.reset()
 
     d.setPressureCfg()
@@ -191,62 +159,24 @@ func (d *DPS310) init() {
     d.waitPressureReady()
 }
 
-func (d *DPS310) readProductRevID() {
-    outBuf := []byte{PRODREVID}
-    inBuf := make([]byte, 1)
-
-    err := d.dev.Tx(outBuf, inBuf)
-    if err != nil {
-        log.Printf("Error writing to sensor %d\n", err)
-    }
-
-    log.Printf("prod revision id = 0x%x", inBuf[0])
+func (d *DPS310) GetProductRevID() byte {
+    prodID := d.getRegisterBits(PRODREVID, 0, 8)
+    return prodID
 }
 
 func (d *DPS310) correctTemp() {
-
-    log.Printf("CorrectTemp")
-
-    outBuf := []byte{0x0E, 0xA5}
-    err := d.dev.Tx(outBuf, nil)
-    if err != nil {
-        log.Printf("Error writing to sensor %d\n", err)
-    }
-
-    outBuf = []byte{0x0F, 0x96}
-    err = d.dev.Tx(outBuf, nil)
-    if err != nil {
-        log.Printf("Error writing to sensor %d\n", err)
-    }
-
-    outBuf = []byte{0x62, 0x02}
-    err = d.dev.Tx(outBuf, nil)
-    if err != nil {
-        log.Printf("Error writing to sensor %d\n", err)
-    }
-
-    outBuf = []byte{0x0E, 0x00}
-    err = d.dev.Tx(outBuf, nil)
-    if err != nil {
-        log.Printf("Error writing to sensor %d\n", err)
-    }
-
-    outBuf = []byte{0x0F, 0x00}
-    err = d.dev.Tx(outBuf, nil)
-    if err != nil {
-        log.Printf("Error writing to sensor %d\n", err)
-    }
+    d.setRegisterBits(0x0E, 0, 8, 0xA5)
+    d.setRegisterBits(0x0F, 0, 8, 0x96)
+    d.setRegisterBits(0x62, 0, 8, 0x02)
+    d.setRegisterBits(0x0E, 0, 8, 0x00)
+    d.setRegisterBits(0x0F, 0, 8, 0x00)
 
     _ = d.rawTemperature()
 }
 
 func (d *DPS310) reset() {
-    log.Printf("dps310 reset")
-    outBuf := []byte{RESET, 0x89}
-    err := d.dev.Tx(outBuf, nil)
-    if err != nil {
-        log.Printf("Error writing to sensor %d\n", err)
-    }
+
+    d.setRegisterBits(RESET, 0, 8, 0x89)
 
     time.Sleep(10 * time.Millisecond)
 
@@ -258,31 +188,21 @@ func (d *DPS310) reset() {
     d.readCalibration()
 
     config := d.calibCoeffTempSrcBit()
-    // log.Printf("calib coefficient temp src bit: %08b", config)
     d.setTempMeasurementSrcBit(config)
 }
 
-func (d *DPS310) getCfgRegister(bit uint8) uint8 {
-    outBuf := []byte{MEASCFG}
-    inBuf := make([]byte, 1)
-    err := d.dev.Tx(outBuf, inBuf)
-    //log.Printf("inBuf=%08b", inBuf[0])
-    if err != nil {
-        log.Printf("Error reading / writing to sensor %d\n", err)
-    }
-
-    // log.Printf("cfg register: %08b", inBuf[0])
-    return (inBuf[0] >> bit) & 0x1
+func (d *DPS310) getMeasCfgRegister(bit uint8) uint8 {
+    return d.getRegisterBits(MEASCFG, bit, 1)
 }
 
 func (d *DPS310) waitTemperatureReady() {
-    for d.getCfgRegister(TMP_RDY) == 0 {
+    for d.getMeasCfgRegister(TMP_RDY) == 0 {
         time.Sleep(1 * time.Millisecond)
     }
 }
 
 func (d *DPS310) waitPressureReady() {
-    for d.getCfgRegister(PRS_RDY) == 0 {
+    for d.getMeasCfgRegister(PRS_RDY) == 0 {
         time.Sleep(1 * time.Millisecond)
     }
 }
@@ -303,15 +223,7 @@ func (d *DPS310) readCalibration() {
     coeffs := make([]byte, 18)
 
     for offset := 0; offset < 18; offset++ {
-        buffer := []byte{0x10 + byte(offset)}
-        data := make([]byte, 1)
-
-        err := d.dev.Tx(buffer, data)
-
-        if err != nil {
-            log.Printf("Error reading / writing to sensor %d\n", err)
-        }
-        coeffs[offset] = data[0]
+        coeffs[offset] = d.getRegisterBits(0x10+byte(offset), 0, 8)
     }
 
     x := uint32(coeffs[0])<<4 | uint32((coeffs[1]>>4)&0x0F)
@@ -342,53 +254,25 @@ func (d *DPS310) readCalibration() {
     d.c30 = twosComplement(
         uint32(coeffs[16])<<8|
             uint32(coeffs[17]), 16)
-
-    log.Printf("readCalibration: d= %v %v %v %v %v %v %v %v %v", d.c0, d.c1, d.c00, d.c10, d.c01, d.c11, d.c20, d.c21, d.c30)
 }
 
 func (d *DPS310) sensorReady() bool {
-    value := d.getCfgRegister(SENSOR_RDY)
+    value := d.getMeasCfgRegister(SENSOR_RDY)
     return value == 1
 }
 
 func (d *DPS310) coefficientsReady() bool {
-    value := d.getCfgRegister(COEF_RDY)
+    value := d.getMeasCfgRegister(COEF_RDY)
     return value == 1
 }
 
 func (d *DPS310) calibCoeffTempSrcBit() byte {
-
-    buffer := []byte{TMPCOEFSRCE}
-    inBuf := make([]byte, 1)
-    err := d.dev.Tx(buffer, inBuf)
-
-    if err != nil {
-        log.Printf("Error reading / writing to sensor %d\n", err)
-    }
-
-    val := (inBuf[0] & (0x01 << 7)) >> 7
-
+    val := d.getRegisterBits(TMPCOEFSRCE, 7, 1)
     return val
 }
 
 func (d *DPS310) setTempMeasurementSrcBit(val byte) {
-
-    buffer := []byte{TMPCFG}
-    currentVal := make([]byte, 1)
-    err := d.dev.Tx(buffer, currentVal)
-
-    if err != nil {
-        log.Printf("Error reading / writing to sensor %d\n", err)
-    }
-
-    currentVal[0] = currentVal[0] | (val << 7)
-
-    buffer = []byte{TMPCFG, currentVal[0]}
-    err = d.dev.Tx(buffer, nil)
-
-    if err != nil {
-        log.Printf("Error reading / writing to sensor %d\n", err)
-    }
+    d.setRegisterBits(TMPCFG, 7, 1, val)
 }
 
 func (d *DPS310) rawTemperature() uint32 {
@@ -407,28 +291,13 @@ func (d *DPS310) rawTemperature() uint32 {
 
 func (d *DPS310) rawPressure() uint32 {
     buffer := []byte{PSRB2}
-    inBuf := make([]byte, 1)
+    inBuf := make([]byte, 3)
     err := d.dev.Tx(buffer, inBuf)
     if err != nil {
         log.Printf("Error reading / writing to sensor %d\n", err)
     }
-    psrB2 := inBuf[0]
 
-    buffer = []byte{PSRB1}
-    err = d.dev.Tx(buffer, inBuf)
-    if err != nil {
-        log.Printf("Error reading / writing to sensor %d\n", err)
-    }
-    psrB1 := inBuf[0]
-
-    buffer = []byte{PSRB0}
-    err = d.dev.Tx(buffer, inBuf)
-    if err != nil {
-        log.Printf("Error reading / writing to sensor %d\n", err)
-    }
-    psrB0 := inBuf[0]
-
-    rawPressure := uint32(psrB2)<<16 | uint32(psrB1)<<8 | uint32(psrB0)
+    rawPressure := uint32(inBuf[0])<<16 | uint32(inBuf[1])<<8 | uint32(inBuf[2])
 
     return rawPressure
 }
@@ -439,8 +308,6 @@ func (d *DPS310) GetPressure() float64 {
 
     pressureReading := d.rawPressure()
     rawPressure := twosComplement(pressureReading, 24)
-
-    log.Printf("raw_pressure=%v", rawPressure)
 
     scaledRawTemp := float64(rawTemperature) / float64(d.temperatureScale)
     scaledRawPressure := float64(rawPressure) / float64(d.pressureScale)
