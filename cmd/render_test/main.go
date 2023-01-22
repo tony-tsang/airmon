@@ -1,17 +1,15 @@
 package main
 
 import (
-    "fmt"
     "github.com/fogleman/gg"
     "github.com/makeworld-the-better-one/dither/v2"
+    "github.com/tony-tsang/airmon/assets"
     "github.com/tony-tsang/airmon/internal/pkg/dps310"
     "github.com/tony-tsang/airmon/internal/pkg/hko"
     "github.com/tony-tsang/airmon/internal/pkg/uc8159"
-    "golang.org/x/image/font"
-    "golang.org/x/image/font/opentype"
     "image/color"
+    "image/png"
     "log"
-    "os"
     "periph.io/x/conn/v3/i2c/i2creg"
     "periph.io/x/conn/v3/physic"
     "periph.io/x/conn/v3/spi"
@@ -71,15 +69,15 @@ func main() {
 
     context := gg.NewContext(640, 400)
 
-    fileData, err := os.ReadFile("NotoSansTC-Light.otf")
-    if err != nil {
-        log.Fatalf("Unable to load font file: %v", err)
-    }
+    // fileData, err := os.ReadFile("NotoSansTC-Light.otf")
+    // if err != nil {
+    // 	log.Fatalf("Unable to load font file: %v", err)
+    // }
 
-    f, err := opentype.Parse(fileData)
-    if err != nil {
-        log.Fatalf("Unable to parse font: %v", err)
-    }
+    //f, err := opentype.Parse(assets.FontData)
+    //if err != nil {
+    //    log.Fatalf("Unable to parse font: %v", err)
+    //}
 
     drawMutex := sync.Mutex{}
 
@@ -91,42 +89,52 @@ func main() {
     go func() {
 
         for {
-            time.Sleep(2 * time.Minute)
-
             drawMutex.Lock()
 
-            face, err := opentype.NewFace(f, &opentype.FaceOptions{
-                Size:    24,
-                DPI:     72,
-                Hinting: font.HintingNone,
-            })
+            pngFile, err := assets.IconFS.Open("icons/01n.png")
             if err != nil {
-                log.Fatalf("NewFace: %v", err)
+                log.Fatal("Error opening 01n.png")
             }
-            context.SetFontFace(face)
-            context.SetColor(color.Black)
-            context.DrawString(allData.HKOData.Warnings, 0, 60)
-
-            face, err = opentype.NewFace(f, &opentype.FaceOptions{
-                Size:    36,
-                DPI:     72,
-                Hinting: font.HintingNone,
-            })
+            svgImage, err := png.Decode(pngFile)
             if err != nil {
-                log.Fatalf("NewFace: %v", err)
+                log.Fatal("Error decoding png")
             }
-            text := fmt.Sprintf("%0.2f hPa %0.2f ℃", allData.TempPressure.Pressure, allData.TempPressure.Temp)
-            context.SetFontFace(face)
-            w, h := context.MeasureString(text)
-            log.Printf("w=%v, h=%v", w, h)
-            context.SetColor(color.RGBA{0, 0, 255, 0xFF})
-            context.DrawRectangle(0, 0, w, h)
-            context.SetColor(color.Black)
-            context.DrawString(text, 0, 32)
 
-            image := context.Image()
+            /*
+               face, err := opentype.NewFace(f, &opentype.FaceOptions{
+                   Size:    24,
+                   DPI:     72,
+                   Hinting: font.HintingNone,
+               })
+               if err != nil {
+                   log.Fatalf("NewFace: %v", err)
+               }*/
 
-            palette := []color.Color{
+            /*
+               context.SetFontFace(face)
+               context.SetColor(color.Black)
+               context.DrawString(allData.HKOData.GeneralSituation, 0, 60)
+
+               face, err = opentype.NewFace(f, &opentype.FaceOptions{
+                   Size:    36,
+                   DPI:     72,
+                   Hinting: font.HintingNone,
+               })
+               if err != nil {
+                   log.Fatalf("NewFace: %v", err)
+               }
+               text := fmt.Sprintf("%0.2f hPa %0.2f ℃", allData.TempPressure.Pressure, allData.TempPressure.Temp)
+               context.SetFontFace(face)
+               w, h := context.MeasureString(text)
+               log.Printf("w=%v, h=%v", w, h)
+               context.SetColor(color.RGBA{0, 0, 255, 0xFF})
+               context.DrawRectangle(0, 0, w, h)
+               context.SetColor(color.Black)
+               context.DrawStringWrapped(text, 0, 32, 0, 0, 640, 2, gg.AlignLeft)
+
+               image := context.Image()
+            */
+            palette := color.Palette{
                 color.RGBA{0, 0, 0, 0xFF},
                 color.RGBA{255, 255, 255, 0xFF},
                 color.RGBA{0, 255, 0, 0xFF},
@@ -139,12 +147,18 @@ func main() {
 
             ditherer := dither.NewDitherer(palette)
             ditherer.Matrix = dither.FloydSteinberg
-            dithered := ditherer.Dither(image)
+            dithered := ditherer.Dither(svgImage)
 
             for y := 0; y < 400; y++ {
                 for x := 0; x < 640; x++ {
                     pixel := dithered.At(x, y)
-                    index := matchPalette(palette, pixel)
+                    var index int
+                    _, _, _, alpha := pixel.RGBA()
+                    if alpha == 0 {
+                        index = 1
+                    } else {
+                        index = matchPalette(palette, pixel)
+                    }
                     d.SetPixel(x, y, uc8159.Color(index))
                 }
             }
@@ -153,6 +167,7 @@ func main() {
             drawMutex.Unlock()
             context.SetColor(color.White)
             context.Clear()
+            time.Sleep(2 * time.Minute)
         }
     }()
 
@@ -177,12 +192,6 @@ func main() {
     }
 }
 
-func matchPalette(palette []color.Color, pixel color.Color) int {
-    for i, paletteColor := range palette {
-        if paletteColor == pixel {
-            return i
-        }
-    }
-
-    return 0
+func matchPalette(palette color.Palette, pixel color.Color) int {
+    return palette.Index(pixel)
 }

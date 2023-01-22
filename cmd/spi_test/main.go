@@ -78,7 +78,7 @@ func main() {
         log.Fatalf("Error: %v", err)
     }
 
-    palette := []color.Color{
+    palette := color.Palette{
         color.RGBA{0, 0, 0, 0xFF},
         color.RGBA{255, 255, 255, 0xFF},
         color.RGBA{0, 255, 0, 0xFF},
@@ -111,12 +111,13 @@ func main() {
     d.UpdateScreen()
 }
 
-func matchPalette(palette []color.Color, pixel color.Color) int {
-    for i, paletteColor := range palette {
-        if paletteColor == pixel {
-            return i
-        }
-    }
-
-    return 0
+func matchPalette(palette color.Palette, pixel color.Color) int {
+    //for i, paletteColor := range palette {
+    //    if paletteColor == pixel {
+    //        return i
+    //    }
+    //}
+    //
+    //return 0
+    return palette.Index(pixel)
 }
